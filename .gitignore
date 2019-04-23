@@ -73,12 +73,7 @@ lib_managed/
 src_managed/
 project/boot/
 project/plugins/project/
-.history
 .cache
 .lib/
 
-.gitignore
-.idea/workspace.xml
-project/project/
-project/target/
 src\main\resources\stackoverflow\stackoverflow.csv
