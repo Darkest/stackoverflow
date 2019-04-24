@@ -8,6 +8,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import java.io.File
+import StackOverflow._
 
 @RunWith(classOf[JUnitRunner])
 class StackOverflowSuite extends FunSuite with BeforeAndAfterAll {
@@ -34,5 +35,12 @@ class StackOverflowSuite extends FunSuite with BeforeAndAfterAll {
     assert(instantiatable, "Can't instantiate a StackOverflow object")
   }
 
+  test("scored RDD should have 2121822 entries") {
+    val lines   = sc.textFile("src/main/resources/stackoverflow/stackoverflow.csv")
+    val raw     = rawPostings(lines)
+    val grouped = groupedPostings(raw)
+    val scoredCount  = scoredPostings(grouped).count()
 
+    assert(scoredCount == 2121822)
+  }
 }
