@@ -19,7 +19,6 @@ object StackOverflow extends StackOverflow {
     .setMaster("local[*]")
     .setAppName("StackOverflow")
     .set("spark.eventLog.enabled", "true")
-    //.set("spark.executor.memory","8g")
 
   @transient lazy val sc: SparkContext = new SparkContext(conf)
   sc.setLogLevel("WARN")
@@ -29,7 +28,7 @@ object StackOverflow extends StackOverflow {
   /** Main function */
   def main(args: Array[String]): Unit = {
 
-    val lines   = sc.textFile("src/main/resources/stackoverflow/stackoverflow.csv").cache()
+    val lines   = sc.textFile("src/main/resources/stackoverflow/stackoverflow.csv")
     val raw     = rawPostings(lines)
     val grouped = groupedPostings(raw)
     val scored  = scoredPostings(grouped)
@@ -90,8 +89,6 @@ class StackOverflow extends Serializable {
   def groupedPostings(postings: RDD[Posting]): RDD[(QID, Iterable[(Question, Answer)])] = {
 
     val posts = postings.map(p => (if (p.postingType == 1) p.id else p.parentId.get) -> p)
-    //val postsPartitioner = new RangePartitioner(8, posts)
-    //posts.partitionBy(postsPartitioner).cache()
 
     val questions = posts.filter{case (_, post) => post.postingType == 1}
     val answers = posts.filter{case (_, post) => post.postingType == 2}
@@ -101,7 +98,7 @@ class StackOverflow extends Serializable {
 
 
   /** Compute the maximum score for each posting */
-  def scoredPostings(grouped: RDD[(QID, Iterable[(Question, Answer)])]): RDD[(QID,(Question, HighScore))] = {
+  def scoredPostings(grouped: RDD[(QID, Iterable[(Question, Answer)])]): RDD[(Question, HighScore)] = {
 
     def answerHighScore(as: Array[Answer]): HighScore = {
       var highScore = 0
@@ -114,13 +111,13 @@ class StackOverflow extends Serializable {
           }
       highScore
     }
-    //grouped.reduceByKey((a1, a2) => if (a1.score > a2.score) a1 else a2).mapValues(_.score)
-    grouped.mapValues{qaList => (qaList.head._1,answerHighScore(qaList.map(_._2).toArray))}
+    //grouped.flatMap(_._2).reduceByKey((a1, a2) => if (a1.score > a2.score) a1 else a2).mapValues(_.score) // <- causes shuffling on reduceByKey
+    grouped.map{case (_,qaList) => (qaList.head._1,answerHighScore(qaList.map(_._2).toArray))}
   }
 
 
   /** Compute the vectors for the kmeans */
-  def vectorPostings(scored: RDD[(QID,(Question, HighScore))]): RDD[(LangIndex, HighScore)] = {
+  def vectorPostings(scored: RDD[(Question, HighScore)]): RDD[(LangIndex, HighScore)] = {
     /** Return optional index of first language that occurs in `tags`. */
     def firstLangInTag(tag: Option[String], ls: List[String]): Option[Int] = {
       if (tag.isEmpty) None
@@ -135,7 +132,7 @@ class StackOverflow extends Serializable {
       }
     }
 
-    scored.map{case (_, (q:Question, hs:HighScore)) => firstLangInTag(q.tags, langs).map(_ * langSpread) -> hs}
+    scored.map{case (q:Question, hs:HighScore) => firstLangInTag(q.tags, langs).map(_ * langSpread) -> hs}
       .collect{case (Some(langIdx), hs) => langIdx -> hs}.cache()
   }
 
